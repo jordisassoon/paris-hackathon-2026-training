@@ -69,6 +69,172 @@ def _validate_dataset(
     return path, config.loader, config.sample_processor
 
 
+
+import numpy as np
+import glob
+import os
+
+class BinDataset:
+    """Memory-maps all *.bin files and draws random (seq_len+1)-token windows."""
+
+    def __init__(self, data_dir: str, seq_len: int, dtype: str = "uint16"):
+        paths = sorted(glob.glob(os.path.join(data_dir, "*.bin")))
+        if not paths:
+            raise FileNotFoundError(f"No *.bin files found in '{data_dir}'")
+        self.seq_len  = seq_len
+        np_dtype      = np.dtype(dtype)
+        self.shards   = [np.memmap(p, dtype=np_dtype, mode="r") for p in paths]
+        self.lengths  = [len(s) for s in self.shards]
+        self.total    = sum(self.lengths)
+        self.weights  = [l / self.total for l in self.lengths]
+        print(f"[data] {len(paths)} shard(s), {self.total:,} tokens total")
+
+    def get_sample(self) -> list[int]:
+        shard = self.shards[np.random.choice(len(self.shards), p=self.weights)]
+        start = np.random.randint(0, len(shard) - self.seq_len - 1)
+        return shard[start:start + self.seq_len + 1].tolist()
+    
+    def get_batch(self, batch_size: int, device):
+        xs, ys = [], []
+        for _ in range(batch_size):
+            shard = self.shards[np.random.choice(len(self.shards), p=self.weights)]
+            start = np.random.randint(0, len(shard) - self.seq_len - 1)
+            chunk = torch.from_numpy(shard[start:start + self.seq_len + 1].astype(np.int64))
+            xs.append(chunk[:-1])
+            ys.append(chunk[1:])
+        return torch.stack(xs).to(device), torch.stack(ys).to(device)
+
+
+class HackathonTextDataset(IterableDataset, Stateful):
+    def __init__(
+        self,
+        dataset_name: str,
+        dataset_path: str | None,
+        tokenizer: BaseTokenizer,
+        seq_len: int = 2048,
+        dp_rank: int = 0,
+        dp_world_size: int = 1,
+        infinite: bool = False,
+    ) -> None:
+        # Force lowercase for consistent comparison
+        dataset_name = dataset_name.lower()
+
+        self.ds = BinDataset(data_dir=dataset_path, 
+                            seq_len=seq_len)
+
+        self.dataset_name = dataset_name
+        # self._data = split_dataset_by_node(self.ds, dp_rank, dp_world_size)
+        self.seq_len = seq_len
+        self.infinite = infinite
+
+        # Variables for checkpointing
+        self._sample_idx = 0
+        self._epoch: int = 0
+        self._inputs_buffer: list[int] = []
+        self._positions_buffer: list[int] = []
+
+    # def _get_data_iter(self):
+    #     # For map-style datasets, resume by skipping to the correct index
+    #     # For iterable-style datasets, the underlying iterator already points to the correct index
+    #     if isinstance(self._data, Dataset):
+    #         if self._sample_idx == len(self._data):
+    #             return iter([])
+    #         else:
+    #             return iter(self._data.skip(self._sample_idx))
+
+    #     return iter(self._data)
+
+    def _normalize_positions(self, positions: list[int]) -> list[int]:
+        offset = positions[0]
+        if offset > 0:
+            for i, p in enumerate(positions):
+                if p == 0:
+                    break
+                positions[i] = p - offset
+        return positions
+
+    def __iter__(self):
+        max_buffer_token_len = 1 + self.seq_len
+
+        while True:
+            sample_tokens = self.ds.get_sample()
+            # Use the dataset-specific text processor
+
+            self._inputs_buffer.extend(sample_tokens)
+            # Per-document positions reset at document boundaries,
+            # matching inference frameworks (e.g. vLLM) that start
+            # positions at 0 per request.  Positions wrap at seq_len
+            # to stay within the RoPE cache, effectively chunking
+            # long documents into seq_len-sized segments.
+            # TODO: make overflow policy configurable (chunk / truncate / drop).
+            self._positions_buffer.extend(range(len(sample_tokens)))
+            self._sample_idx += 1
+
+            while len(self._inputs_buffer) >= max_buffer_token_len:
+                x = torch.LongTensor(self._inputs_buffer[:max_buffer_token_len])
+                pos = torch.LongTensor(
+                    self._normalize_positions(
+                        self._positions_buffer[:max_buffer_token_len]
+                    )
+                )
+                # update buffers to the remaining tokens
+                self._inputs_buffer = self._inputs_buffer[max_buffer_token_len:]
+                self._positions_buffer = self._positions_buffer[
+                    max_buffer_token_len:
+                ]
+
+                input = x[:-1]
+                label = x[1:]
+                positions = pos[:-1]
+                yield {"input": input, "positions": positions}, label
+
+            # if not self.infinite:
+            #     logger.warning(f"Dataset {self.dataset_name} has run out of data")
+            #     break
+            # else:
+            #     # Reset offset for the next iteration
+            #     self._sample_idx = 0
+            #     self._epoch += 1
+            #     logger.warning(f"Dataset {self.dataset_name} is being re-looped")
+            #     # Ensures re-looping a dataset loaded from a checkpoint works correctly
+            #     if not isinstance(self._data, Dataset):
+            #         if hasattr(self._data, "set_epoch") and hasattr(
+            #             self._data, "epoch"
+            #         ):
+            #             self._data.set_epoch(self._data.epoch + 1)
+
+    # def load_state_dict(self, state_dict):
+    #     self._inputs_buffer = state_dict["inputs_buffer"]
+    #     if "positions_buffer" not in state_dict:
+    #         logger.warning(
+    #             "Checkpoint missing 'positions_buffer'. Falling back to empty buffer. "
+    #             "RoPE positions may be incorrect with block_causal attention."
+    #         )
+    #     self._positions_buffer = state_dict.get("positions_buffer", [])
+
+    #     if isinstance(self._data, Dataset):
+    #         self._sample_idx = state_dict["sample_idx"]
+    #     else:
+    #         assert "data" in state_dict
+    #         self._data.load_state_dict(state_dict["data"])
+
+    # def state_dict(self):
+    #     _state_dict: dict[str, Any] = {
+    #         "inputs_buffer": self._inputs_buffer,
+    #         "positions_buffer": self._positions_buffer,
+    #     }
+
+    #     if isinstance(self._data, Dataset):
+    #         _state_dict["sample_idx"] = self._sample_idx
+    #         _state_dict["epoch"] = self._epoch
+    #     else:
+    #         # Save the iterable dataset's state to later efficiently resume from it
+    #         # https://huggingface.co/docs/datasets/v3.5.0/en/stream#save-a-dataset-checkpoint-and-resume-iteration
+    #         _state_dict["data"] = self._data.state_dict()
+
+    #     return _state_dict
+
+
 class HuggingFaceTextDataset(IterableDataset, Stateful):
     def __init__(
         self,
@@ -234,6 +400,57 @@ class HuggingFaceTextDataLoader(ParallelAwareDataloader):
         **kwargs,
     ):
         hf_ds = HuggingFaceTextDataset(
+            dataset_name=config.dataset,
+            dataset_path=config.dataset_path,
+            tokenizer=tokenizer,
+            seq_len=seq_len,
+            dp_rank=dp_rank,
+            dp_world_size=dp_world_size,
+            infinite=config.infinite,
+        )
+
+        dataloader_kwargs = {
+            "num_workers": config.num_workers,
+            "persistent_workers": config.persistent_workers,
+            "pin_memory": config.pin_memory,
+            "prefetch_factor": config.prefetch_factor,
+            "batch_size": local_batch_size,
+        }
+
+        super().__init__(
+            hf_ds,
+            dp_rank=dp_rank,
+            dp_world_size=dp_world_size,
+            **dataloader_kwargs,
+        )
+
+
+class HackathonTextDataLoader(ParallelAwareDataloader):
+    """Configurable text dataloader that wraps HuggingFaceTextDataset.
+
+    This dataloader can be used for both training and validation by
+    configuring the appropriate dataset, seq_len, batch_size, etc.
+    """
+
+    @dataclass(kw_only=True, slots=True)
+    class Config(ParallelAwareDataloader.Config):
+        dataset_path = "/home/data"
+
+        infinite: bool = True
+        """Whether to loop the dataset infinitely"""
+
+    def __init__(
+        self,
+        config: Config,
+        *,
+        dp_world_size: int,
+        dp_rank: int,
+        tokenizer: BaseTokenizer,
+        seq_len: int,
+        local_batch_size: int,
+        **kwargs,
+    ):
+        hf_ds = HackathonTextDataset(
             dataset_name=config.dataset,
             dataset_path=config.dataset_path,
             tokenizer=tokenizer,
