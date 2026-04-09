@@ -1,19 +1,103 @@
+# ---- All project specifications ---- #
 [project]
-name = "paris-hackathon-2026-training"
-version = "0.1.0"
-description = "Add your description here"
+name = "torchtitan"
+description = "A PyTorch native platform for training generative AI models"
 readme = "README.md"
-authors = [
-    { name = "Samuel Weinbach", email = "samuel.weinbach@aleph-alpha-research.com" }
-]
-requires-python = ">=3.14"
+requires-python = "==3.12.*"
+license = { file = "LICENSE" }
+authors = [{ name = "PyTorch Team", email = "packages@pytorch.org" }]
+keywords = ["pytorch", "training", "llm"]
 dependencies = [
-    "numpy>=2.4.4",
+    # Hugging Face integrations
+    "datasets>=4.5.0",
+    "tokenizers>=0.15.0",
+    "safetensors",
+
+    # Miscellaneous
+    "fsspec",
+    "tabulate",
+    "tensorboard",
+    "torchdata>=0.8.0",
+    "transformers",
+    "tyro",
+    "wandb",
+
+    "pillow>=12.0.0",
+    "toml>=0.10.2",
+    # CUDA dependencies
+    "torch>=2.10.0.dev0",
+    "torchao",
+    "dion",
+    "scipy>=1.17.1",
+    "einops",
+    "quack-kernels[cu13]>=0.2.5",
+]
+dynamic = ["version"]
+
+[project.urls]
+GitHub = "https://github.com/pytorch/torchtitan"
+Documentation = "https://github.com/pytorch/torchtitan/tree/main/docs"
+Issues = "https://github.com/pytorch/torchtitan/issues"
+
+
+[dependency-groups]
+dev = [
+    "pyrefly>=0.48.0",
+    "pytest-benchmark",
+    "pytest-cov",
+    "pytest-split",
+    "pytest-xdist",
+    "pytest",
+    "tomli-w",
+    "ufmt>=2.9.1",
+    "expecttest", # test_tokenizer
 ]
 
-[project.scripts]
-paris-hackathon-2026-training = "paris_hackathon_2026_training:main"
+[tool.setuptools.dynamic]
+version = { file = "assets/version.txt" }
 
+# ---- Explicit project build information ---- #
 [build-system]
-requires = ["uv_build>=0.10.10,<0.11.0"]
-build-backend = "uv_build"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = [""]
+include = ["torchtitan*"]
+
+[tool.pytest.ini_options]
+addopts = ["--showlocals"]                                           # show locals; CI opts into xdist explicitly
+testpaths = ["tests"]
+markers = ["gpu: needs a GPU runner, otherwise test can not be run"]
+
+[tool.uv]
+# If not set explicitly, use first match from the given indices (1. pypi, 2. pytorch)
+index-strategy = "unsafe-first-match"
+# Override old dependencies
+# torch override needed because dion pins exact nightly version
+override-dependencies = ["requests>=2.32.2", "datasets==4.5.0", "torch>=2.5.0"]
+preview = true
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+[tool.uv.sources]
+dion = { git = "https://github.com/microsoft/dion.git" }
+torch = { index = "pytorch-cu130" }
+torchao = { index = "pytorch-cu130" }
+
+
+# Non-explicit index order defines lookup priority
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+
+# These indices are not explicit because when installing the latest torch versions,
+# we also need other dependencies from that index, e.g. pytorch-triton
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/nightly/cu130"
+
+[tool.pyrefly]
+project-excludes = ["torchtitan/experiments", "**/tests/**"]
+ignore-missing-imports = ["torchao.*", "torchft"]            # optional dependencies
