@@ -7,7 +7,7 @@
 from torchtitan.components.checkpoint import CheckpointManager
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
 from torchtitan.components.metrics import MetricsProcessor
-from torchtitan.components.optimizer import OptimizersContainer, ParamGroupConfig
+from torchtitan.components.optimizer import OptimizersContainer
 from torchtitan.config import (
     ActivationCheckpointConfig,
     ParallelismConfig,
@@ -17,6 +17,11 @@ from torchtitan.hf_datasets.text_datasets import (
     ChatDataLoader,
     HuggingFaceTextDataLoader,
     HackathonTextDataLoader,
+)
+from torchtitan.models.qwen3.optimizer import (
+    AdamW,
+    MultiGroupOptimizersContainer,
+    Muon,
 )
 from torchtitan.trainer import Trainer
 
@@ -53,22 +58,11 @@ def qwen3_debugmodel() -> Trainer.Config:
 
 def qwen3_debugmodel_param_groups() -> Trainer.Config:
     config = qwen3_debugmodel()
-    config.optimizer = OptimizersContainer.Config(
-        lr=8e-4,
-        param_groups=[
-            ParamGroupConfig(
-                pattern=r"tok_embeddings\.",
-                weight_decay_multiplier=0.0,
-            ),
-            ParamGroupConfig(
-                pattern=r"\.bias$",
-                weight_decay_multiplier=0.0,
-            ),
-            ParamGroupConfig(
-                pattern=r"(?:attention_norm|ffn_norm|norm)\.",
-                weight_decay_multiplier=0.0,
-            ),
-        ],
+    config.optimizer = MultiGroupOptimizersContainer.Config(
+        embedding=AdamW.Config(lr=8e-4),
+        backbone_1d=AdamW.Config(lr=8e-4),
+        backbone_2d=Muon.Config(),
+        heads=AdamW.Config(lr=8e-4),
     )
     return config
 

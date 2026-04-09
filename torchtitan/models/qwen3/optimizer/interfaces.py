@@ -11,6 +11,7 @@ from torchtitan.distributed import ParallelDims
 
 __all__ = [
     "ConfigurableOptimizer",
+    "empty_param_groups",
     "OptimizerGroup",
     "ParamGroup",
 ]
@@ -44,6 +45,10 @@ class ParamGroup:
     def extend(self, other: ParamGroup) -> None:
         self.decay_params.extend(other.decay_params)
         self.no_decay_params.extend(other.no_decay_params)
+
+
+def empty_param_groups() -> dict[OptimizerGroup, ParamGroup]:
+    return {group: ParamGroup() for group in OptimizerGroup}
 
 
 class ConfigurableOptimizer(Configurable):

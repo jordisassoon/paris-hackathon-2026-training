@@ -12,6 +12,11 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
+from torchtitan.models.qwen3.optimizer.interfaces import (
+    empty_param_groups,
+    OptimizerGroup,
+    ParamGroup,
+)
 from torchtitan.models.common.attention import (
     AttentionMasksType,
     GQAttention,
@@ -70,6 +75,27 @@ class Qwen3TransformerBlock(TransformerBlock):
             x = x + self.feed_forward(self.ffn_norm(x))
         return x
 
+    def get_param_groups(self) -> dict[OptimizerGroup, ParamGroup]:
+        if self.moe_enabled:
+            raise NotImplementedError(
+                "Qwen3TransformerBlock.get_param_groups() supports dense blocks only."
+            )
+
+        groups = empty_param_groups()
+        for layer_groups in (
+            self.attention.get_param_groups(),
+            self.feed_forward.get_param_groups(),
+        ):
+            for key, group in layer_groups.items():
+                groups[key].extend(group)
+
+        for norm in (self.attention_norm, self.ffn_norm):
+            for param in norm.parameters():
+                if param.requires_grad:
+                    groups[OptimizerGroup.BACKBONE_1D].no_decay_params.append(param)
+
+        return groups
+
 
 class Qwen3Model(Decoder):
     """
@@ -83,7 +109,6 @@ class Qwen3Model(Decoder):
     class Config(Decoder.Config):
         dim: int = 1024
         vocab_size: int = 151936
-        enable_weight_tying: bool = False
 
         def update_from_config(
             self,
@@ -117,11 +142,6 @@ class Qwen3Model(Decoder):
                     "Varlen attention is not supported with CP."
                 )
 
-            if self.enable_weight_tying and parallelism.pipeline_parallel_degree > 1:
-                raise NotImplementedError(
-                    "Weight tying is not supported with Pipeline Parallel."
-                )
-
             tp = parallelism.tensor_parallel_degree
             if tp > 1:
                 n_heads = self.layers[0].attention.n_heads
@@ -150,22 +170,69 @@ class Qwen3Model(Decoder):
                 seq_len,
             )
 
-    def __init__(self, config: Config):
-        super().__init__(config)
-        self.enable_weight_tying = config.enable_weight_tying
+    def get_param_groups(self) -> dict[OptimizerGroup, ParamGroup]:
+        if any(layer_cfg.moe is not None for layer_cfg in self.config.layers):
+            raise NotImplementedError(
+                "Qwen3Model.get_param_groups() currently supports dense models only."
+            )
 
-        if self.enable_weight_tying:
-            self.tok_embeddings.weight = self.output.weight
+        groups = empty_param_groups()
 
-    def init_states(
-        self,
-        *,
-        buffer_device: torch.device | None = None,
-    ) -> None:
-        if self.enable_weight_tying:
-            # Re-tie before init: on meta device the __init__ tying may
-            # not have worked correctly.
-            assert self.tok_embeddings is not None and self.output is not None
-            self.tok_embeddings.weight = self.output.weight
+        if (
+            self.tok_embeddings is not None
+            and self.tok_embeddings.weight.requires_grad
+        ):
+            groups[OptimizerGroup.EMBEDDING].no_decay_params.append(
+                self.tok_embeddings.weight
+            )
 
-        super().init_states(buffer_device=buffer_device)
+        if self.output is not None:
+            if self.output.weight.requires_grad:
+                groups[OptimizerGroup.HEADS].decay_params.append(self.output.weight)
+            if self.output.bias is not None and self.output.bias.requires_grad:
+                groups[OptimizerGroup.HEADS].no_decay_params.append(self.output.bias)
+
+        if self.norm is not None:
+            for param in self.norm.parameters():
+                if param.requires_grad:
+                    groups[OptimizerGroup.BACKBONE_1D].no_decay_params.append(param)
+
+        if self.layers is not None:
+            for layer in self.layers.values():
+                layer_groups = self._unwrap_grouping_module(layer).get_param_groups()
+                for key, group in layer_groups.items():
+                    groups[key].extend(group)
+
+        self._validate_param_groups(groups)
+        return groups
+
+    def _validate_param_groups(self, groups: dict[OptimizerGroup, ParamGroup]) -> None:
+        seen: dict[int, str] = {}
+        for group_name, parameter_group in groups.items():
+            for param in parameter_group.all_params():
+                param_id = id(param)
+                if param_id in seen:
+                    raise ValueError(
+                        f"Parameter appears in both '{seen[param_id]}' and "
+                        f"'{group_name.value}' groups"
+                    )
+                seen[param_id] = group_name.value
+
+        for name, param in self.named_parameters():
+            if param.requires_grad and id(param) not in seen:
+                raise ValueError(
+                    f"Parameter '{name}' (shape {tuple(param.shape)}) requires "
+                    f"grad but is not assigned to any optimizer group"
+                )
+
+    @staticmethod
+    def _unwrap_grouping_module(module: nn.Module) -> nn.Module:
+        current = module
+        while not hasattr(current, "get_param_groups"):
+            children = list(current.children())
+            if len(children) != 1:
+                raise TypeError(
+                    f"Cannot find get_param_groups() under wrapper {type(current).__name__}"
+                )
+            current = children[0]
+        return current

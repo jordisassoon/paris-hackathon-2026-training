@@ -629,6 +629,25 @@ class GQAttention(BaseAttention):
 
         self.inner_attention = config.inner_attention.build()
 
+    def get_param_groups(self):
+        from torchtitan.models.qwen3.optimizer.interfaces import (
+            OptimizerGroup,
+            empty_param_groups,
+        )
+
+        groups = empty_param_groups()
+        for linear in (self.wq, self.wk, self.wv, self.wo):
+            if linear.weight.requires_grad:
+                groups[OptimizerGroup.BACKBONE_2D].decay_params.append(linear.weight)
+            if linear.bias is not None and linear.bias.requires_grad:
+                groups[OptimizerGroup.BACKBONE_1D].no_decay_params.append(linear.bias)
+
+        for norm in (self.q_norm, self.k_norm):
+            if norm is not None and norm.weight.requires_grad:
+                groups[OptimizerGroup.BACKBONE_1D].no_decay_params.append(norm.weight)
+
+        return groups
+
     def forward(
         self,
         x: torch.Tensor,
