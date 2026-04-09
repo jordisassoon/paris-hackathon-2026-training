@@ -12,21 +12,21 @@
 
 #SBATCH --job-name=torchtitan_multi_node
 
-#SBATCH --ntasks=4
+#SBATCH --ntasks=1
 
-#SBATCH --nodes=4
+#SBATCH --nodes=1
 
 #SBATCH --gpus-per-task=8
 
 #SBATCH --cpus-per-task=96
 
-#SBATCH --partition=train
+#SBATCH --partition=gpus
 
 
 nodes=( $( scontrol show hostnames $SLURM_JOB_NODELIST ) )
 nodes_array=($nodes)
 head_node=${nodes_array[0]}
-head_node_ip=$(srun --nodes=1 --ntasks=1 -w "$head_node" hostname --ip-address)
+head_node_ip=$(srun --nodes=1 --ntasks=1 -w "$head_node" hostname -I | awk '{print $1}')
 
 echo Node IP: $head_node_ip
 export LOGLEVEL=INFO
