@@ -27,6 +27,7 @@ from torchtitan.components.optimizer import (
     OptimizersContainer,
     OptimizersInBackwardContainer,
 )
+from torchtitan.models.qwen3.optimizer import MultiGroupOptimizersContainer
 from torchtitan.components.quantization import QuantizationConverter
 from torchtitan.components.tokenizer import BaseTokenizer, HuggingFaceTokenizer
 from torchtitan.components.validate import BaseValidator, Validator
@@ -86,8 +87,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
         model_converters: ModelConvertersContainer.Config = field(
             default_factory=ModelConvertersContainer.Config
         )
-        optimizer: OptimizersContainer.Config = field(
-            default_factory=OptimizersContainer.Config
+        optimizer: MultiGroupOptimizersContainer.Config = field(
+            default_factory=MultiGroupOptimizersContainer.Config
         )
         lr_scheduler: LRSchedulersContainer.Config = field(
             default_factory=LRSchedulersContainer.Config
