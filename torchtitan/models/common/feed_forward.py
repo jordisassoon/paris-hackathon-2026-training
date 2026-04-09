@@ -50,5 +50,20 @@ class FeedForward(Module):
         self.w2 = config.w2.build()
         self.w3 = config.w3.build()
 
+    def get_param_groups(self):
+        from torchtitan.models.qwen3.optimizer.interfaces import (
+            OptimizerGroup,
+            empty_param_groups,
+        )
+
+        groups = empty_param_groups()
+        for linear in (self.w1, self.w2, self.w3):
+            if linear.weight.requires_grad:
+                groups[OptimizerGroup.BACKBONE_2D].decay_params.append(linear.weight)
+            if linear.bias is not None and linear.bias.requires_grad:
+                groups[OptimizerGroup.BACKBONE_1D].no_decay_params.append(linear.bias)
+
+        return groups
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.w2(F.silu(self.w1(x)) * self.w3(x))

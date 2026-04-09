@@ -208,7 +208,14 @@ class OptimizersContainer(Optimizer, Stateful, Configurable, Generic[T]):
 
         return result
 
-    def __init__(self, config: Config, *, model_parts: list[nn.Module]) -> None:
+    def __init__(
+        self,
+        config: Config,
+        *,
+        model_parts: list[nn.Module],
+        parallel_dims: ParallelDims | None = None,
+    ) -> None:
+        del parallel_dims
         optimizer_cls = self._resolve_optimizer_cls(config.name)
         optimizer_kwargs = self._build_optimizer_kwargs(config)
         all_params = []
@@ -287,7 +294,14 @@ class OptimizersInBackwardContainer(OptimizersContainer):
     class Config(OptimizersContainer.Config):
         pass
 
-    def __init__(self, config: Config, *, model_parts: list[nn.Module]) -> None:
+    def __init__(
+        self,
+        config: Config,
+        *,
+        model_parts: list[nn.Module],
+        parallel_dims: ParallelDims | None = None,
+    ) -> None:
+        del parallel_dims
         optimizer_cls = self._resolve_optimizer_cls(config.name)
         optimizer_kwargs = self._build_optimizer_kwargs(config)
         all_params = []

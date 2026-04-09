@@ -191,7 +191,6 @@ def _debugmodel() -> Qwen3Model.Config:
         vocab_size=vocab_size,
         dim=dim,
         norm=_qwen3_norm(dim),
-        enable_weight_tying=True,
         tok_embeddings=Embedding.Config(
             num_embeddings=vocab_size,
             embedding_dim=dim,
@@ -281,7 +280,6 @@ def _0_6b() -> Qwen3Model.Config:
         vocab_size=vocab_size,
         dim=dim,
         norm=_qwen3_norm(dim),
-        enable_weight_tying=True,
         tok_embeddings=Embedding.Config(
             num_embeddings=vocab_size,
             embedding_dim=dim,
@@ -331,7 +329,6 @@ def _1_7b() -> Qwen3Model.Config:
         vocab_size=vocab_size,
         dim=dim,
         norm=_qwen3_norm(dim),
-        enable_weight_tying=True,
         tok_embeddings=Embedding.Config(
             num_embeddings=vocab_size,
             embedding_dim=dim,
@@ -381,7 +378,6 @@ def _4b() -> Qwen3Model.Config:
         vocab_size=vocab_size,
         dim=dim,
         norm=_qwen3_norm(dim),
-        enable_weight_tying=True,
         tok_embeddings=Embedding.Config(
             num_embeddings=vocab_size,
             embedding_dim=dim,
