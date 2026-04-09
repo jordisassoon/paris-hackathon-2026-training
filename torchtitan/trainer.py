@@ -852,17 +852,13 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
                     break
 
                 # Check for 10 min:
-                if time.time() - start_time > 1 * 60:
+                if time.time() - start_time > 10 * 60:
                     logger.warning(
-                        "Training has been running for 10 minutes. If this is unexpected, please check the logs for potential issues."
+                        "Training has been running for 10 minutes. Saving checkpoint and stopping."
                     )
-                    start_time = time.time()
-                    # TODO: save checkpoint
                     self.checkpointer.save(
                         self.step, last_step=True,
                     )
-
-                    #break
                     break
 
                 

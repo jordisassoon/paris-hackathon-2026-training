@@ -174,6 +174,10 @@ def hackathon_model() -> Trainer.Config:
         model_spec=model_registry("1.7B"),
         dataloader=HackathonTextDataLoader.Config(
             dataset_path="/home/data",
+            num_workers=4,
+            prefetch_factor=2,
+            pin_memory=True,
+            persistent_workers=True,
         ),
         optimizer=MultiGroupOptimizersContainer.Config(
             embedding=AdamW.Config(lr=8e-4),

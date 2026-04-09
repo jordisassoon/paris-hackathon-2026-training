@@ -55,10 +55,42 @@ export NCCL_BUFFSIZE=2097152
 export FI_EFA_SET_CUDA_SYNC_MEMOPS=0
 
 MODULE=${MODULE:-"qwen3"}
-CONFIG=${CONFIG:-"qwen3_debugmodel"}
+CONFIG=${CONFIG:-"hackathon_model"}
+STEPS=${STEPS:-"180"}
+
+# Per-group learning rates (passed from run_sweep.sh via --export)
+LR_EMB=${LR_EMB:-""}
+LR_BACKBONE1D=${LR_BACKBONE1D:-""}
+LR_MUON=${LR_MUON:-""}
+LR_HEADS=${LR_HEADS:-""}
+
+BASE_LR=${BASE_LR:-""}
+
+# Build optimizer LR flags if set
+OPT_FLAGS=""
+if [ -n "$LR_EMB" ]; then
+    OPT_FLAGS="${OPT_FLAGS} --optimizer.embedding.lr ${LR_EMB}"
+fi
+if [ -n "$LR_BACKBONE1D" ]; then
+    OPT_FLAGS="${OPT_FLAGS} --optimizer.backbone_1d.lr ${LR_BACKBONE1D}"
+fi
+if [ -n "$LR_MUON" ]; then
+    OPT_FLAGS="${OPT_FLAGS} --optimizer.backbone_2d.lr ${LR_MUON}"
+fi
+if [ -n "$LR_HEADS" ]; then
+    OPT_FLAGS="${OPT_FLAGS} --optimizer.heads.lr ${LR_HEADS}"
+fi
+
+# Unique checkpoint folder per LR to avoid loading stale checkpoints
+CHECKPOINT_FOLDER="checkpoint_lr_${BASE_LR:-default}"
+
+# Wandb run name (passed from run_sweep.sh)
+export WANDB_RUN_NAME=${WANDB_RUN_NAME:-"sweep-baseLR${BASE_LR}"}
 
 dcgmi profile --pause
 # adjust sbatch --ntasks and sbatch --nodes above and --nnodes below
 # to your specific node count, and update target launch file.
-srun torchrun --nnodes 1 --nproc_per_node 8 --rdzv_id 101 --rdzv_backend c10d --rdzv_endpoint "$head_node_ip:29500" -m torchtitan.train --module ${MODULE} --config ${CONFIG} "$@"
+srun torchrun --nnodes ${SLURM_NNODES} --nproc_per_node 8 --rdzv_id ${SLURM_JOB_ID} --rdzv_backend c10d --rdzv_endpoint "$head_node_ip:29500" \
+    -m torchtitan.train --module ${MODULE} --config ${CONFIG} --training.steps=${STEPS} \
+    --checkpoint.folder ${CHECKPOINT_FOLDER} ${OPT_FLAGS}
 dcgmi profile --resume

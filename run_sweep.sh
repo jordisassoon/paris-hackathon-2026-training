@@ -71,51 +71,20 @@ for BASE_LR in "${BASE_LR_ARRAY[@]}"; do
     echo "  embedding.lr=${LR_EMB}  backbone_1d.lr=${LR_BACKBONE1D}  backbone_2d.lr=${LR_MUON}  heads.lr=${LR_HEADS}"
     echo "========================================"
 
-    if [ "$NGPU" -eq 16 ]; then
-        echo "Running 16-GPU job on Slurm cluster"
+    if [ "${USE_SLURM:-0}" -eq 1 ]; then
+        WANDB_RUN_NAME="sweep-baseLR${BASE_LR}"
+        CHECKPOINT_FOLDER="checkpoint_lr_${BASE_LR}"
+        echo "Submitting Slurm job for BASE_LR=${BASE_LR} (wandb: ${WANDB_RUN_NAME})"
 
-        MAX_RETRIES=3
-        RETRY_COUNT=0
-
-        while true; do
-            echo "Submitting Slurm job (attempt $((RETRY_COUNT+1)))..."
-
-            job_output=$(sbatch --export=ALL,CONFIG_FILE="$CONFIG_FILE",LBS="$LBS",STEPS="$STEPS",LR_EMB="$LR_EMB",LR_BACKBONE1D="$LR_BACKBONE1D",LR_MUON="$LR_MUON",LR_HEADS="$LR_HEADS" multinode_trainer.slurm)
-            job_id=$(echo "$job_output" | awk '{print $4}')
-
-            LOG_PATH="/home/jordansassoon/torchtitanic/outputs/logs/multinode_titanic_${job_id}.out"
-
-            echo "Submitted Job ID: $job_id (LR=${LR})"
-            echo "Waiting for job to finish..."
-
-            # Wait for job to leave queue
-            while squeue -j "$job_id" 2>/dev/null | grep -q "$job_id"; do
-                sleep 10
-            done
-
-            echo "Job finished. Checking log for stale file handle..."
-
-            # Detect stale file handle error
-            if grep -qi "stale file handle" "$LOG_PATH"; then
-                echo "Detected 'Stale file handle' error in Slurm log."
-                RETRY_COUNT=$((RETRY_COUNT+1))
-
-                if [ "$RETRY_COUNT" -ge "$MAX_RETRIES" ]; then
-                    echo "Max retries reached. Exiting."
-                    break
-                fi
-
-                echo "Retrying job submission..."
-                sleep 5
-                continue
-            fi
-
-            # No stale file handle → exit retry loop
-            break
-        done
+        job_output=$(sbatch \
+            --export=ALL,MODULE="$MODULE",CONFIG="$CONFIG",STEPS="$STEPS",BASE_LR="$BASE_LR",LR_EMB="$LR_EMB",LR_BACKBONE1D="$LR_BACKBONE1D",LR_MUON="$LR_MUON",LR_HEADS="$LR_HEADS",WANDB_RUN_NAME="$WANDB_RUN_NAME" \
+            multinode_trainer.slurm)
+        job_id=$(echo "$job_output" | awk '{print $4}')
+        echo "Submitted Job ID: $job_id"
     else    
         echo "Running local job on single node with ${NGPU} GPUs"
         TORCHFT_LIGHTHOUSE=${TORCHFT_LIGHTHOUSE:-"http://localhost:29510"}
+        export WANDB_RUN_NAME="sweep-baseLR${BASE_LR}"
 
         if [ -n "$COMM_MODE" ]; then
             # Communication mode specified: validate configuration or run in debug mode
@@ -127,7 +96,11 @@ for BASE_LR in "${BASE_LR_ARRAY[@]}"; do
             TORCHFT_LIGHTHOUSE=${TORCHFT_LIGHTHOUSE} \
             torchrun --nproc_per_node=${NGPU} --rdzv_backend c10d --rdzv_endpoint="localhost:0" \
             --local-ranks-filter ${LOG_RANK} --role rank --tee 3 \
-            -m torchtitan.train --module ${MODULE} --config ${CONFIG} --optimizer.embedding.lr ${LR_EMB} --optimizer.backbone_1d.lr ${LR_BACKBONE1D} --optimizer.backbone_2d.lr ${LR_MUON} --optimizer.heads.lr ${LR_HEADS} --training.steps=${STEPS} "$@"
+            -m torchtitan.train --module ${MODULE} --config ${CONFIG} \
+            --optimizer.embedding.lr ${LR_EMB} --optimizer.backbone_1d.lr ${LR_BACKBONE1D} \
+            --optimizer.backbone_2d.lr ${LR_MUON} --optimizer.heads.lr ${LR_HEADS} \
+            --training.steps=${STEPS} \
+            --checkpoint.folder "checkpoint_lr_${BASE_LR}" "$@"
         fi
     fi
 
