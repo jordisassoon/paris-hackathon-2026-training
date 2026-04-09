@@ -347,7 +347,7 @@ def _1_7b() -> Qwen3Model.Config:
     dim = 2048
     head_dim = 128
     n_layers = 28
-    vocab_size = 151936
+    vocab_size = 32768  # Could possibly reduce to 32k
     return Qwen3Model.Config(
         vocab_size=vocab_size,
         dim=dim,
@@ -364,8 +364,8 @@ def _1_7b() -> Qwen3Model.Config:
         ),
         rope=RoPE.Config(
             dim=head_dim,
-            max_seq_len=4096,
-            theta=1000000.0,
+            max_seq_len=1024,
+            theta=10000.0,
             backend="cos_sin",
         ),
         layers=_build_qwen3_layers(

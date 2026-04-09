@@ -174,17 +174,26 @@ def hackathon_model() -> Trainer.Config:
         dataloader=HackathonTextDataLoader.Config(
             dataset_path="/home/data",
         ),
-        optimizer=OptimizersContainer.Config(lr=8e-4),
-        lr_scheduler=LRSchedulersContainer.Config(warmup_steps=20),
+        optimizer=MultiGroupOptimizersContainer.Config(
+            embedding=AdamW.Config(lr=8e-4),
+            backbone_1d=AdamW.Config(lr=8e-4),
+            backbone_2d=Muon.Config(),
+            heads=AdamW.Config(lr=8e-4),
+        ),
+        lr_scheduler=LRSchedulersContainer.Config(
+            warmup_steps=0
+            decay_ratio=0.3,
+            min_lr_factor=0.1,
+        ),
         training=TrainingConfig(
-            local_batch_size=4,
-            seq_len=4096,
+            local_batch_size=72,
+            seq_len=1024,
             steps=10000,
         ),
         checkpoint=CheckpointManager.Config(
             interval=50,
             last_save_model_only=False,
-            export_dtype="float16",
+            export_dtype="float32",
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
