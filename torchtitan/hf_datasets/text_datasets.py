@@ -92,7 +92,8 @@ class BinDataset:
         
         random.seed(42)
         random.shuffle(indices)
-        self.indices= indices[seq_len*dp_rank:seq_len*(dp_rank+1)]
+        shard_len = len(indices) // dp_world_size
+        self.indices= indices[shard_len*dp_rank:shard_len*(dp_rank+1)]
 
 
         self.total    = sum(self.lengths)
