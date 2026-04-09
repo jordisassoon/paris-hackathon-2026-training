@@ -19,7 +19,7 @@ class Model(torch.nn.Module):
 
 
 def get_model(config):
-    checkpoint_path = "/home/platypus/eric/paris-hackathon-2026-training/outputs/checkpoint_platypus/step-37"  # Example path, adjust as needed
+    checkpoint_path = "/home/platypus/eric/paris-hackathon-2026-training/outputs/checkpoint_platypus/step-54"  # Example path, adjust as needed
 
     os.environ["NGPU"] = "1"
     os.environ["LOG_RANK"] = "0"
@@ -44,14 +44,30 @@ def get_model(config):
 
     return Model(model)
 
+def evaluate_zero_model(model):
+    # Create dummy input data
+    dummy_input = torch.zeros((1, 128), dtype=torch.int64, device="cuda")  # Adjust input shape and values as needed
+
+    # Run the model in evaluation mode
+    model.eval()
+    with torch.no_grad():
+        logits, loss = model(dummy_input)
+
+    # Check the output is all 0
+    assert torch.all(logits.argmax(dim=-1) == 0), "Logits are not all zero as expected."
+    print("Evaluation successful: Logits are all zero.")
+
 if __name__ == "__main__":
     model = get_model(None)
     print(model)
 
     # Test one forward pass with dummy data
-    dummy_input = torch.randint(0, 32000, (1, 128)).to("cuda")  # Adjust input shape and values as needed
+    dummy_input = torch.zeros((1, 128), dtype=torch.int64, device="cuda")  # Adjust input shape and values as needed
     logits, loss = model(dummy_input)
     print("Logits shape:", logits.shape)
     print("Loss:", loss)
-        
+    
+    # Evaluate the model to confirm outputs are all zero
+    evaluate_zero_model(model)
+
 
