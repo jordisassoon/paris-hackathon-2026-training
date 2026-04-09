@@ -20,6 +20,13 @@ NPROC_PER_NODE=$SLURM_GPUS_PER_NODE
 
 echo "Master: $MASTER_ADDR:$MASTER_PORT  |  Nodes: $NNODES  |  GPUs/node: $NPROC_PER_NODE"
 
+# ── Load env (wandb key, etc.) ──────────────────────────────────────────────
+if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+fi
+
 # debugging flags (optional)
 export NCCL_DEBUG=WARN
 export PYTHONFAULTHANDLER=1
@@ -34,7 +41,8 @@ CONFIG=${CONFIG:-"hackathon_model"}
 # Unique checkpoint folder per LR to avoid loading stale checkpoints
 CHECKPOINT_FOLDER="platypus_checkpoints/final_run"
 
-# Wandb run name (passed from run_sweep.sh)
+export WANDB_PROJECT=${WANDB_PROJECT:-"paris-hackathon-2026"}
+export WANDB_TEAM=${WANDB_TEAM:-"aleph-alpha"}
 export WANDB_RUN_NAME=${WANDB_RUN_NAME:-"final-run"}
 
 # ── Launch one torchrun per node via srun ────────────────────────────────────
@@ -45,4 +53,4 @@ srun python -m torch.distributed.run \
     --rdzv_endpoint="$MASTER_ADDR:$MASTER_PORT" \
     --rdzv_id="$SLURM_JOB_ID" \
     -m torchtitan.train --module ${MODULE} --config ${CONFIG} \
-    --checkpoint.folder ${CHECKPOINT_FOLDER} ${OPT_FLAGS}
+    --checkpoint.folder ${CHECKPOINT_FOLDER}
