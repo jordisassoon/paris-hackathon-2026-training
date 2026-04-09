@@ -189,7 +189,8 @@ def hackathon_model() -> Trainer.Config:
         training=TrainingConfig(
             local_batch_size=86,
             seq_len=1024,
-            steps=10000,
+            steps=180,
+            global_batch_size=2752,
         ),
         checkpoint=CheckpointManager.Config(
             interval=50,

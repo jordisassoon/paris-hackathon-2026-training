@@ -36,15 +36,28 @@ CONFIG=${CONFIG:-"hackathon_model"}
 SUMMARY_PARSED_LOG_FILE=${SUMMARY_PARSED_LOG_FILE:-"summary_parsed_logs.csv"}
 
 # Training parameters
-STEPS=${STEPS:-"1000"}
-LR_ARRAY=(0.01 0.001 0.003)
+STEPS=${STEPS:-"180"}
+# Base LRs: 2^-3, 2^-4, 2^-5
+BASE_LR_ARRAY=(0.125 0.0625 0.03125)
+
+# Per-group multipliers
+MULT_MUON=1.0        # backbone_2d
+MULT_EMB=2.0         # embedding
+MULT_BACKBONE1D=2.0  # backbone_1d
+MULT_HEADS=0.25      # heads
 
 TORCHFT_LIGHTHOUSE=${TORCHFT_LIGHTHOUSE:-"http://localhost:29510"}
 
-for LR in "${LR_ARRAY[@]}"; do
-    export LR
+for BASE_LR in "${BASE_LR_ARRAY[@]}"; do
+    LR_EMB=$(awk "BEGIN {printf \"%.6g\", $BASE_LR * $MULT_EMB}")
+    LR_BACKBONE1D=$(awk "BEGIN {printf \"%.6g\", $BASE_LR * $MULT_BACKBONE1D}")
+    LR_MUON=$(awk "BEGIN {printf \"%.6g\", $BASE_LR * $MULT_MUON}")
+    LR_HEADS=$(awk "BEGIN {printf \"%.6g\", $BASE_LR * $MULT_HEADS}")
+
+    export BASE_LR LR_EMB LR_BACKBONE1D LR_MUON LR_HEADS
     echo "========================================"
-    echo "Starting sweep with LR=${LR}"
+    echo "Starting sweep with BASE_LR=${BASE_LR}"
+    echo "  embedding.lr=${LR_EMB}  backbone_1d.lr=${LR_BACKBONE1D}  backbone_2d.lr=${LR_MUON}  heads.lr=${LR_HEADS}"
     echo "========================================"
 
     if [ "$NGPU" -eq 16 ]; then
@@ -56,7 +69,7 @@ for LR in "${LR_ARRAY[@]}"; do
         while true; do
             echo "Submitting Slurm job (attempt $((RETRY_COUNT+1)))..."
 
-            job_output=$(sbatch --export=ALL,CONFIG_FILE="$CONFIG_FILE",LBS="$LBS",STEPS="$STEPS",LR="$LR" multinode_trainer.slurm)
+            job_output=$(sbatch --export=ALL,CONFIG_FILE="$CONFIG_FILE",LBS="$LBS",STEPS="$STEPS",LR_EMB="$LR_EMB",LR_BACKBONE1D="$LR_BACKBONE1D",LR_MUON="$LR_MUON",LR_HEADS="$LR_HEADS" multinode_trainer.slurm)
             job_id=$(echo "$job_output" | awk '{print $4}')
 
             LOG_PATH="/home/jordansassoon/torchtitanic/outputs/logs/multinode_titanic_${job_id}.out"
@@ -103,9 +116,9 @@ for LR in "${LR_ARRAY[@]}"; do
             TORCHFT_LIGHTHOUSE=${TORCHFT_LIGHTHOUSE} \
             torchrun --nproc_per_node=${NGPU} --rdzv_backend c10d --rdzv_endpoint="localhost:0" \
             --local-ranks-filter ${LOG_RANK} --role rank --tee 3 \
-            -m torchtitan.train --module ${MODULE} --config ${CONFIG} --optimizer.embedding.lr ${LR} --optimizer.backbone_1d.lr ${LR} --optimizer.backbone_2d.lr ${LR} --optimizer.heads.lr ${LR} --training.steps=${STEPS} "$@"
+            -m torchtitan.train --module ${MODULE} --config ${CONFIG} --optimizer.embedding.lr ${LR_EMB} --optimizer.backbone_1d.lr ${LR_BACKBONE1D} --optimizer.backbone_2d.lr ${LR_MUON} --optimizer.heads.lr ${LR_HEADS} --training.steps=${STEPS} "$@"
         fi
     fi
 
-    echo "Finished sweep with LR=${LR}"
+    echo "Finished sweep with BASE_LR=${BASE_LR}"
 done
