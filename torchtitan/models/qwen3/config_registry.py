@@ -13,6 +13,7 @@ from torchtitan.config import (
     ParallelismConfig,
     TrainingConfig,
 )
+from torchtitan.config.configs import CompileConfig
 from torchtitan.hf_datasets.text_datasets import (
     ChatDataLoader,
     HuggingFaceTextDataLoader,
@@ -181,12 +182,12 @@ def hackathon_model() -> Trainer.Config:
             heads=AdamW.Config(lr=8e-4),
         ),
         lr_scheduler=LRSchedulersContainer.Config(
-            warmup_steps=0
+            warmup_steps=0,
             decay_ratio=0.3,
             min_lr_factor=0.1,
         ),
         training=TrainingConfig(
-            local_batch_size=72,
+            local_batch_size=86,
             seq_len=1024,
             steps=10000,
         ),
@@ -198,6 +199,9 @@ def hackathon_model() -> Trainer.Config:
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
         ),
+        compile=CompileConfig(
+            enable=True,
+        )
     )
 
 
