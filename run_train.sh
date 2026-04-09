@@ -28,7 +28,7 @@ set -ex
 NGPU=${NGPU:-"8"}
 export LOG_RANK=${LOG_RANK:-0}
 MODULE=${MODULE:-"qwen3"}
-CONFIG=${CONFIG:-"qwen3_debugmodel"}
+CONFIG=${CONFIG:-"hackathon_model"}
 COMM_MODE=${COMM_MODE:-""}
 
 TORCHFT_LIGHTHOUSE=${TORCHFT_LIGHTHOUSE:-"http://localhost:29510"}

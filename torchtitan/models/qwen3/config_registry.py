@@ -16,6 +16,7 @@ from torchtitan.config import (
 from torchtitan.hf_datasets.text_datasets import (
     ChatDataLoader,
     HuggingFaceTextDataLoader,
+    HackathonTextDataLoader,
 )
 from torchtitan.trainer import Trainer
 
@@ -158,6 +159,55 @@ def qwen3_1_7b() -> Trainer.Config:
     return Trainer.Config(
         hf_assets_path="./assets/hf/Qwen3-1.7B",
         model_spec=model_registry("1.7B"),
+        dataloader=HackathonTextDataLoader.Config(
+            dataset_path="/home/data",
+        ),
+        optimizer=OptimizersContainer.Config(lr=8e-4),
+        lr_scheduler=LRSchedulersContainer.Config(warmup_steps=20),
+        training=TrainingConfig(
+            local_batch_size=4,
+            seq_len=4096,
+            steps=100,
+        ),
+        checkpoint=CheckpointManager.Config(
+            interval=50,
+            last_save_model_only=False,
+            export_dtype="float16",
+        ),
+        activation_checkpoint=ActivationCheckpointConfig(
+            mode="selective",
+        ),
+    )
+
+def hackathon_model() -> Trainer.Config:
+    return Trainer.Config(
+        hf_assets_path="./assets/hf/Qwen3-1.7B",
+        model_spec=model_registry("1.7B"),
+        dataloader=HackathonTextDataLoader.Config(
+            dataset_path="/home/data",
+        ),
+        optimizer=OptimizersContainer.Config(lr=8e-4),
+        lr_scheduler=LRSchedulersContainer.Config(warmup_steps=20),
+        training=TrainingConfig(
+            local_batch_size=4,
+            seq_len=4096,
+            steps=10000,
+        ),
+        checkpoint=CheckpointManager.Config(
+            interval=50,
+            last_save_model_only=False,
+            export_dtype="float16",
+        ),
+        activation_checkpoint=ActivationCheckpointConfig(
+            mode="selective",
+        ),
+    )
+
+
+def qwen3_1_7b_varlen() -> Trainer.Config:
+    return Trainer.Config(
+        hf_assets_path="./assets/hf/Qwen3-1.7B",
+        model_spec=model_registry("1.7B_varlen"),
         dataloader=HuggingFaceTextDataLoader.Config(
             dataset="c4",
         ),
@@ -177,7 +227,6 @@ def qwen3_1_7b() -> Trainer.Config:
             mode="selective",
         ),
     )
-
 
 def qwen3_14b() -> Trainer.Config:
     return Trainer.Config(

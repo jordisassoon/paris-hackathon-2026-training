@@ -566,8 +566,8 @@ class CheckpointManager(Configurable):
         Returns:
             None
         """
-        if not self._should_save(curr_step, last_step):
-            return
+        # if not self._should_save(curr_step, last_step):
+        #     return
 
         begin = time.monotonic()
         logger.info("Saving the checkpoint (or staging if async is enabled).")
@@ -755,7 +755,8 @@ class CheckpointManager(Configurable):
         return max(step_counts)
 
     def _create_checkpoint_id(self, step: int, folder: str = "") -> str:
-        folder = folder if folder else self.folder
+        # folder = folder if folder else self.folder
+        folder = "checkpoint_platypus" if not folder else folder
         return os.path.join(folder, f"step-{step}")
 
     def _flattened_model_states_sd(

@@ -234,7 +234,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
             distinct_seed_mesh_dims=["pp"],
         )
         # build tokenizer
-        self.tokenizer = config.tokenizer.build(tokenizer_path=config.hf_assets_path)
+        self.tokenizer = None
 
         # build dataloader
         self.dataloader = config.dataloader.build(
@@ -828,6 +828,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
         self.checkpointer.load(step=config.checkpoint.load_step)
         logger.info(f"Training starts at step {self.step + 1}")
 
+        start_time = time.time()
+
         with (
             maybe_enable_profiling(
                 config.profiling,
@@ -841,7 +843,25 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
             ) as memory_profiler,
         ):
             data_iterator = self.batch_generator(self.dataloader)
-            while self.should_continue_training():
+            while True:
+                if not self.should_continue_training():
+                    break
+
+                # Check for 10 min:
+                if time.time() - start_time > 1 * 60:
+                    logger.warning(
+                        "Training has been running for 10 minutes. If this is unexpected, please check the logs for potential issues."
+                    )
+                    start_time = time.time()
+                    # TODO: save checkpoint
+                    self.checkpointer.save(
+                        self.step, last_step=(self.step == config.training.steps)
+                    )
+
+                    #break
+                    break
+
+                
                 self.step += 1
                 self.gc_handler.run(self.step)
                 try:
@@ -850,9 +870,9 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
                     logger.warning("Ran out of data; last step was canceled.")
                     break
 
-                self.checkpointer.save(
-                    self.step, last_step=(self.step == config.training.steps)
-                )
+                # self.checkpointer.save(
+                #     self.step, last_step=(self.step == config.training.steps)
+                # )
 
                 # Run validation if validator is available
                 if self.config.validator.enable and self.validator.should_validate(
@@ -881,6 +901,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
         logger.info("Training completed")
 
     def should_continue_training(self) -> bool:
+
+
         return self.step < self.config.training.steps
 
     def state_dict(self) -> dict[str, Any]:
