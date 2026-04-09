@@ -168,8 +168,18 @@ def qwen3_1_7b() -> Trainer.Config:
         ),
     )
 
+
+# from torchtitan.components.quantization.mx import MXFP8Converter
+# from torchtitan.protocols.model_converter import ModelConvertersContainer
+
 def hackathon_model() -> Trainer.Config:
     return Trainer.Config(
+        # In your config_registry function:
+        # model_converters=ModelConvertersContainer.Config(
+        #     converters=[
+        #         MXFP8Converter.Config(recipe_name="mxfp8_rceil"),
+        #     ],
+        # ),
         hf_assets_path="./assets/hf/Qwen3-1.7B",
         model_spec=model_registry("1.7B"),
         metrics=MetricsProcessor.Config(

@@ -851,7 +851,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
                     break
 
                 # Check for 10 min:
-                if time.time() - start_time > 0.2 * 60:
+                if time.time() - start_time > 10 * 60:
                     logger.warning(
                         "Training has been running for 10 minutes. If this is unexpected, please check the logs for potential issues."
                     )
