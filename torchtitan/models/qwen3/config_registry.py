@@ -201,7 +201,7 @@ def hackathon_model() -> Trainer.Config:
         lr_scheduler=LRSchedulersContainer.Config(
             warmup_steps=0,
             decay_ratio=0.3,
-            min_lr_factor=0.1,
+            min_lr_factor=0.01,
         ),
         training=TrainingConfig(
             local_batch_size=86,
