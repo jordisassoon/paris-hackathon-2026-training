@@ -35,6 +35,17 @@ MODULE=${MODULE:-"qwen3"}
 CONFIG=${CONFIG:-"hackathon_model"}
 SUMMARY_PARSED_LOG_FILE=${SUMMARY_PARSED_LOG_FILE:-"summary_parsed_logs.csv"}
 
+# Wandb configuration
+# Load API key from .env file if present (not committed to repo)
+if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+fi
+export WANDB_PROJECT=${WANDB_PROJECT:-"paris-hackathon-2026"}
+export WANDB_ENTITY=${WANDB_ENTITY:-"YOUR_WANDB_ENTITY"}
+export WANDB_RUN_GROUP=${WANDB_RUN_GROUP:-"lr-sweep"}
+
 # Training parameters
 STEPS=${STEPS:-"180"}
 # Base LRs: 2^-3, 2^-4, 2^-5
