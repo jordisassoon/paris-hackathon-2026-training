@@ -829,6 +829,17 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
     def train(self):
         config = self.config
 
+        def any_rank_triggered(elapsed_seconds: float, threshold_seconds: float) -> bool:
+            trigger = torch.tensor(
+                [int(elapsed_seconds > threshold_seconds)],
+                device=self.device,
+                dtype=torch.int64,
+            )
+            torch.distributed.all_reduce(
+                trigger, op=torch.distributed.ReduceOp.MAX
+            )
+            return bool(trigger.item())
+
         self.checkpointer.load(step=config.checkpoint.load_step)
         logger.info(f"Training starts at step {self.step + 1}")
 
@@ -846,13 +857,15 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
         ):
             data_iterator = self.batch_generator(self.dataloader)
 
-            start_time = time.time()
+            start_time = time.monotonic()
             while True:
                 if not self.should_continue_training():
                     break
 
+                elapsed_seconds = time.monotonic() - start_time
+
                 # Check for 10 min:
-                if time.time() - start_time > 10 * 60:
+                if any_rank_triggered(elapsed_seconds, 10 * 60):
                     logger.warning(
                         "Training has been running for 10 minutes. Saving checkpoint and stopping."
                     )
@@ -861,7 +874,28 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
                     )
                     break
 
-                
+                # # Check for 8 min, start LR annealing.
+                # # If 8 minutes have passed, Init the LR scheduler again but change in the config that we do annealing right now
+                # if any_rank_triggered(elapsed_seconds, 0.2 * 60) and not getattr(self, '_annealing_started', False):
+                #     print("Starting annealing....")
+                #     self._annealing_started = True
+                #     steps_done_in_8_minutes = self.step
+                #     expected_remaining_steps = steps_done_in_8_minutes/8*2  # we expect to finish the remaining steps in 2x time of the first 8 minutes
+                #     remaining_steps = max(1, int(expected_remaining_steps))  # avoid 0 steps
+                #     logger.info(
+                #         f"8 minutes passed at step {self.step}. "
+                #         f"Switching to annealing for remaining {remaining_steps} steps."
+                #     )
+                #     config.lr_scheduler.warmup_steps = 0
+                #     config.lr_scheduler.total_steps = remaining_steps
+                #     config.lr_scheduler.decay_ratio = None
+                #     self.lr_schedulers = config.lr_scheduler.build(
+                #         optimizers=self.optimizers,
+                #         training_steps=remaining_steps,
+                #     )
+
+
+
                 self.step += 1
                 self.gc_handler.run(self.step)
                 try:
