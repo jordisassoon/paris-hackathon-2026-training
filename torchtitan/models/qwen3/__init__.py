@@ -13,7 +13,13 @@ import torch.nn as nn
 
 from torchtitan.components.loss import build_cross_entropy_loss
 from torchtitan.distributed.pipeline_parallel import pipeline_llm
-from torchtitan.models.common import Embedding, Linear, RoPE, TransformerBlock
+from torchtitan.models.common import (
+    Embedding,
+    FeedForward,
+    Linear,
+    RoPE,
+    TransformerBlock,
+)
 from torchtitan.models.common.attention import (
     FlexAttention,
     ScaledDotProductAttention,
@@ -21,12 +27,11 @@ from torchtitan.models.common.attention import (
 )
 from torchtitan.models.common.config_utils import (
     make_experts_config,
-    make_ffn_config,
     make_gqa_config,
     make_moe_config,
     make_router_config,
 )
-from torchtitan.models.common.param_init import depth_scaled_std, skip_param_init
+from torchtitan.models.common.param_init import depth_scaled_std
 from torchtitan.models.common.rmsnorm import RMSNorm
 from torchtitan.protocols.model_spec import ModelSpec
 
@@ -45,9 +50,9 @@ _LINEAR_INIT = {
     "weight": partial(nn.init.trunc_normal_, std=0.02),
     "bias": nn.init.zeros_,
 }
+_ZERO_LINEAR_INIT = {"weight": nn.init.zeros_, "bias": nn.init.zeros_}
 _NORM_INIT = {"weight": nn.init.ones_}
 _EMBEDDING_INIT = {"weight": partial(nn.init.normal_, std=1.0)}
-_EMBEDDING_SKIP_INIT = {"weight": skip_param_init}
 
 _EPS = 1e-6
 
@@ -56,6 +61,13 @@ def _output_linear_init(dim: int) -> dict[str, Callable]:
     s = dim**-0.5
     return {
         "weight": partial(nn.init.trunc_normal_, std=s, a=-3 * s, b=3 * s),
+        "bias": nn.init.zeros_,
+    }
+
+
+def _fan_in_linear_init(fan_in: int) -> dict[str, Callable]:
+    return {
+        "weight": partial(nn.init.normal_, std=fan_in**-0.5),
         "bias": nn.init.zeros_,
     }
 
@@ -94,9 +106,9 @@ def _build_qwen3_layers(
     inner_attention=None,
     mask_type: str = "causal",
 ) -> list[TransformerBlock.Config]:
-    """Build per-layer configs for dense Qwen3 models with depth-scaled inits."""
+    """Build per-layer configs for dense Qwen3 models with fan-in/zero inits."""
     layers = []
-    for layer_id in range(n_layers):
+    for _ in range(n_layers):
         layers.append(
             Qwen3TransformerBlock.Config(
                 attention_norm=_qwen3_norm(dim),
@@ -106,8 +118,8 @@ def _build_qwen3_layers(
                     n_heads=n_heads,
                     n_kv_heads=n_kv_heads,
                     head_dim=head_dim,
-                    wqkv_param_init=_LINEAR_INIT,
-                    wo_param_init=_depth_init(layer_id),
+                    wqkv_param_init=_fan_in_linear_init(dim),
+                    wo_param_init=_ZERO_LINEAR_INIT,
                     inner_attention=(
                         inner_attention
                         if inner_attention is not None
@@ -118,11 +130,22 @@ def _build_qwen3_layers(
                     q_norm=_qwen3_q_norm(head_dim),
                     k_norm=_qwen3_q_norm(head_dim),
                 ),
-                feed_forward=make_ffn_config(
-                    dim=dim,
-                    hidden_dim=hidden_dim,
-                    w1_param_init=_LINEAR_INIT,
-                    w2w3_param_init=_depth_init(layer_id),
+                feed_forward=FeedForward.Config(
+                    w1=Linear.Config(
+                        in_features=dim,
+                        out_features=hidden_dim,
+                        param_init=_fan_in_linear_init(dim),
+                    ),
+                    w2=Linear.Config(
+                        in_features=hidden_dim,
+                        out_features=dim,
+                        param_init=_ZERO_LINEAR_INIT,
+                    ),
+                    w3=Linear.Config(
+                        in_features=dim,
+                        out_features=hidden_dim,
+                        param_init=_fan_in_linear_init(dim),
+                    ),
                 ),
             )
         )
@@ -194,12 +217,12 @@ def _debugmodel() -> Qwen3Model.Config:
         tok_embeddings=Embedding.Config(
             num_embeddings=vocab_size,
             embedding_dim=dim,
-            param_init=_EMBEDDING_SKIP_INIT,
+            param_init=_EMBEDDING_INIT,
         ),
         output=Linear.Config(
             in_features=dim,
             out_features=vocab_size,
-            param_init=_output_linear_init(dim),
+            param_init=_ZERO_LINEAR_INIT,
         ),
         rope=RoPE.Config(
             dim=head_dim,
@@ -283,12 +306,12 @@ def _0_6b() -> Qwen3Model.Config:
         tok_embeddings=Embedding.Config(
             num_embeddings=vocab_size,
             embedding_dim=dim,
-            param_init=_EMBEDDING_SKIP_INIT,
+            param_init=_EMBEDDING_INIT,
         ),
         output=Linear.Config(
             in_features=dim,
             out_features=vocab_size,
-            param_init=_output_linear_init(dim),
+            param_init=_ZERO_LINEAR_INIT,
         ),
         rope=RoPE.Config(
             dim=head_dim,
@@ -332,12 +355,12 @@ def _1_7b() -> Qwen3Model.Config:
         tok_embeddings=Embedding.Config(
             num_embeddings=vocab_size,
             embedding_dim=dim,
-            param_init=_EMBEDDING_SKIP_INIT,
+            param_init=_EMBEDDING_INIT,
         ),
         output=Linear.Config(
             in_features=dim,
             out_features=vocab_size,
-            param_init=_output_linear_init(dim),
+            param_init=_ZERO_LINEAR_INIT,
         ),
         rope=RoPE.Config(
             dim=head_dim,
@@ -381,12 +404,12 @@ def _4b() -> Qwen3Model.Config:
         tok_embeddings=Embedding.Config(
             num_embeddings=vocab_size,
             embedding_dim=dim,
-            param_init=_EMBEDDING_SKIP_INIT,
+            param_init=_EMBEDDING_INIT,
         ),
         output=Linear.Config(
             in_features=dim,
             out_features=vocab_size,
-            param_init=_output_linear_init(dim),
+            param_init=_ZERO_LINEAR_INIT,
         ),
         rope=RoPE.Config(
             dim=head_dim,
@@ -420,7 +443,7 @@ def _8b() -> Qwen3Model.Config:
         output=Linear.Config(
             in_features=dim,
             out_features=vocab_size,
-            param_init=_output_linear_init(dim),
+            param_init=_ZERO_LINEAR_INIT,
         ),
         rope=RoPE.Config(
             dim=head_dim,
@@ -467,7 +490,7 @@ def _14b() -> Qwen3Model.Config:
         output=Linear.Config(
             in_features=dim,
             out_features=vocab_size,
-            param_init=_output_linear_init(dim),
+            param_init=_ZERO_LINEAR_INIT,
         ),
         rope=RoPE.Config(
             dim=head_dim,
@@ -501,7 +524,7 @@ def _32b() -> Qwen3Model.Config:
         output=Linear.Config(
             in_features=dim,
             out_features=vocab_size,
-            param_init=_output_linear_init(dim),
+            param_init=_ZERO_LINEAR_INIT,
         ),
         rope=RoPE.Config(
             dim=head_dim,

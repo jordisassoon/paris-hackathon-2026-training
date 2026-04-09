@@ -12,7 +12,7 @@ import torch
 from torchtitan.config import ActivationCheckpointConfig
 from torchtitan.distributed.activation_checkpoint import apply_ac
 from torchtitan.models.qwen3 import qwen3_configs
-from torchtitan.models.qwen3.config_registry import qwen3_debugmodel_param_groups
+from torchtitan.models.qwen3.config_registry import qwen3_debugmodel
 from torchtitan.models.qwen3.optimizer import (
     MultiGroupOptimizersContainer,
     OptimizerGroup,
@@ -178,7 +178,7 @@ class TestQwen3DenseParamGroups(unittest.TestCase):
         )
 
     def test_param_group_debug_config_uses_multigroup_optimizer(self):
-        config = qwen3_debugmodel_param_groups()
+        config = qwen3_debugmodel()
         self.assertIsInstance(config.optimizer, MultiGroupOptimizersContainer.Config)
 
     def test_model_grouping_works_after_activation_checkpoint_wrapping(self):
