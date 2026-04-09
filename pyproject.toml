@@ -7,7 +7,9 @@ authors = [
     { name = "Samuel Weinbach", email = "samuel.weinbach@aleph-alpha-research.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "numpy>=2.4.4",
+]
 
 [project.scripts]
 paris-hackathon-2026-training = "paris_hackathon_2026_training:main"
