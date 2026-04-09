@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Annotated, Any, cast
-
+import random
 import torch
 import tyro
 from datasets import Dataset, load_dataset
@@ -77,7 +77,7 @@ import os
 class BinDataset:
     """Memory-maps all *.bin files and draws random (seq_len+1)-token windows."""
 
-    def __init__(self, data_dir: str, seq_len: int, dtype: str = "uint16"):
+    def __init__(self, data_dir: str, seq_len: int,  dp_rank: int = 0, dp_world_size: int = 1, dtype: str = "uint16"):
         paths = sorted(glob.glob(os.path.join(data_dir, "*.bin")))
         if not paths:
             raise FileNotFoundError(f"No *.bin files found in '{data_dir}'")
@@ -85,14 +85,24 @@ class BinDataset:
         np_dtype      = np.dtype(dtype)
         self.shards   = [np.memmap(p, dtype=np_dtype, mode="r") for p in paths]
         self.lengths  = [len(s) for s in self.shards]
+        indices = []
+        for mm_index, l in enumerate(self.lengths):
+            for i in range(0, l - seq_len - 1, seq_len - 1):
+                indices.append((mm_index, i))
+        
+        random.seed(42)
+        random.shuffle(indices)
+        self.indices= indices[seq_len*dp_rank:seq_len*(dp_rank+1)]
+
+
         self.total    = sum(self.lengths)
         self.weights  = [l / self.total for l in self.lengths]
         print(f"[data] {len(paths)} shard(s), {self.total:,} tokens total")
 
     def get_sample(self) -> list[int]:
-        shard = self.shards[np.random.choice(len(self.shards), p=self.weights)]
-        start = np.random.randint(0, len(shard) - self.seq_len - 1)
-        return shard[start:start + self.seq_len + 1].tolist()
+        shard_index, text_index = self.indices.pop()
+        shard = self.shards[shard_index]
+        return shard[text_index:text_index + self.seq_len + 1].tolist()
     
     def get_batch(self, batch_size: int, device):
         xs, ys = [], []
@@ -120,7 +130,7 @@ class HackathonTextDataset(IterableDataset, Stateful):
         dataset_name = dataset_name.lower()
 
         self.ds = BinDataset(data_dir=dataset_path, 
-                            seq_len=seq_len)
+                            seq_len=seq_len, dp_rank=dp_rank, dp_world_size=dp_world_size)
 
         self.dataset_name = dataset_name
         # self._data = split_dataset_by_node(self.ds, dp_rank, dp_world_size)
