@@ -1,59 +1,33 @@
 #!/bin/bash
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
-
-# --- This script is optimized for AWS with EFA
-# --- adjust NCCL_BUFFSIZE if you encounter memory
-# --- constraint issues or to tune for improved performance.
-# ---
-
-#SBATCH --job-name=torchtitan_multi_node
-
-#SBATCH --ntasks=1
-
-#SBATCH --nodes=1
-
-#SBATCH --gpus-per-task=8
-
-#SBATCH --cpus-per-task=96
-
+#SBATCH --job-name=torchtitan_sweep
 #SBATCH --partition=gpus
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --gpus-per-node=8
+#SBATCH --exclusive
+#SBATCH --output=logs/%j_%N.out
+#SBATCH --error=logs/%j_%N.err
 
+set -euo pipefail
 
-nodes=( $( scontrol show hostnames $SLURM_JOB_NODELIST ) )
-nodes_array=($nodes)
-head_node=${nodes_array[0]}
-head_node_ip=$(srun --nodes=1 --ntasks=1 -w "$head_node" hostname -I | awk '{print $1}')
+mkdir -p logs
 
-echo Node IP: $head_node_ip
-export LOGLEVEL=INFO
-# Enable for A100
-export FI_PROVIDER="efa"
-# Ensure that P2P is available
-# export NCCL_P2P_DISABLE=1
-# export NCCL_IB_DISABLE=1
+# ── Rendezvous info derived from SLURM ──────────────────────────────────────
+MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n1)
+MASTER_PORT=29500
+NNODES=$SLURM_NNODES
+NPROC_PER_NODE=$SLURM_GPUS_PER_NODE
+
+echo "Master: $MASTER_ADDR:$MASTER_PORT  |  Nodes: $NNODES  |  GPUs/node: $NPROC_PER_NODE"
 
 # debugging flags (optional)
 export NCCL_DEBUG=WARN
 export PYTHONFAULTHANDLER=1
-# optional debug settings
-# export NCCL_DEBUG=INFO
-# NCCL_DEBUG_SUBSYS=INIT,GRAPH,ENV
+export LOGLEVEL=INFO
 
-export LD_LIBRARY_PATH=/opt/amazon/efa/lib:$LD_LIBRARY_PATH
-export LD_LIBRARY_PATH=/usr/local/lib/:$LD_LIBRARY_PATH
-export CUDA_LAUNCH_BLOCKING=0
+source .venv/bin/activate
 
-# on your cluster you might need these:
-# set the network interface
-export NCCL_SOCKET_IFNAME="eth0,en,eth,em,bond"
-export NCCL_BUFFSIZE=2097152
-#export TORCH_DIST_INIT_BARRIER=1
-export FI_EFA_SET_CUDA_SYNC_MEMOPS=0
-
+# ── Training config ─────────────────────────────────────────────────────────
 MODULE=${MODULE:-"qwen3"}
 CONFIG=${CONFIG:-"hackathon_model"}
 STEPS=${STEPS:-"180"}
@@ -63,7 +37,6 @@ LR_EMB=${LR_EMB:-""}
 LR_BACKBONE1D=${LR_BACKBONE1D:-""}
 LR_MUON=${LR_MUON:-""}
 LR_HEADS=${LR_HEADS:-""}
-
 BASE_LR=${BASE_LR:-""}
 
 # Build optimizer LR flags if set
@@ -87,10 +60,13 @@ CHECKPOINT_FOLDER="checkpoint_lr_${BASE_LR:-default}"
 # Wandb run name (passed from run_sweep.sh)
 export WANDB_RUN_NAME=${WANDB_RUN_NAME:-"sweep-baseLR${BASE_LR}"}
 
-dcgmi profile --pause
-# adjust sbatch --ntasks and sbatch --nodes above and --nnodes below
-# to your specific node count, and update target launch file.
-srun torchrun --nnodes ${SLURM_NNODES} --nproc_per_node 8 --rdzv_id ${SLURM_JOB_ID} --rdzv_backend c10d --rdzv_endpoint "$head_node_ip:29500" \
-    -m torchtitan.train --module ${MODULE} --config ${CONFIG} --training.steps=${STEPS} \
+# ── Launch one torchrun per node via srun ────────────────────────────────────
+srun python -m torch.distributed.run \
+    --nnodes="$NNODES" \
+    --nproc_per_node="$NPROC_PER_NODE" \
+    --rdzv_backend=c10d \
+    --rdzv_endpoint="$MASTER_ADDR:$MASTER_PORT" \
+    --rdzv_id="$SLURM_JOB_ID" \
+    -m torchtitan.train --module ${MODULE} --config ${CONFIG} \
+    --training.steps=${STEPS} \
     --checkpoint.folder ${CHECKPOINT_FOLDER} ${OPT_FLAGS}
-dcgmi profile --resume
