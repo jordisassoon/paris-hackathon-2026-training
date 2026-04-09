@@ -4,7 +4,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import dataclasses
 import unittest
+
+import torch
 
 from torchtitan.config import ActivationCheckpointConfig
 from torchtitan.distributed.activation_checkpoint import apply_ac
@@ -13,7 +16,9 @@ from torchtitan.models.qwen3.config_registry import qwen3_debugmodel_param_group
 from torchtitan.models.qwen3.optimizer import (
     MultiGroupOptimizersContainer,
     OptimizerGroup,
+    ParamGroup,
 )
+from torchtitan.models.qwen3.state_dict_adapter import Qwen3StateDictAdapter
 
 
 def _param_names(param_group, param_to_name):
@@ -21,6 +26,50 @@ def _param_names(param_group, param_to_name):
 
 
 class TestQwen3DenseParamGroups(unittest.TestCase):
+    def test_biasful_projections_route_biases_to_backbone_1d(self):
+        config = qwen3_configs["debugmodel"]()
+        layer0 = config.layers[0]
+
+        attention = dataclasses.replace(
+            layer0.attention,
+            wq=dataclasses.replace(layer0.attention.wq, bias=True),
+            wkv=dataclasses.replace(layer0.attention.wkv, bias=True),
+            wo=dataclasses.replace(layer0.attention.wo, bias=True),
+        )
+        feed_forward = dataclasses.replace(
+            layer0.feed_forward,
+            w1=dataclasses.replace(layer0.feed_forward.w1, bias=True),
+            w2=dataclasses.replace(layer0.feed_forward.w2, bias=True),
+            w3=dataclasses.replace(layer0.feed_forward.w3, bias=True),
+        )
+        layers = list(config.layers)
+        layers[0] = dataclasses.replace(
+            layer0,
+            attention=attention,
+            feed_forward=feed_forward,
+        )
+        model = dataclasses.replace(config, layers=layers).build()
+
+        block_groups = model.layers["0"].get_param_groups()
+        param_to_name = {param: name for name, param in model.named_parameters()}
+
+        self.assertTrue(
+            {
+                "layers.0.attention.wq.bias",
+                "layers.0.attention.wk.bias",
+                "layers.0.attention.wv.bias",
+                "layers.0.attention.wo.bias",
+                "layers.0.feed_forward.w1.bias",
+                "layers.0.feed_forward.w2.bias",
+                "layers.0.feed_forward.w3.bias",
+            }.issubset(
+                _param_names(
+                    block_groups[OptimizerGroup.BACKBONE_1D].no_decay_params,
+                    param_to_name,
+                )
+            )
+        )
+
     def test_block_attention_and_ffn_delegate_grouping(self):
         model = qwen3_configs["debugmodel"]().build()
         block = model.layers["0"]
@@ -142,6 +191,42 @@ class TestQwen3DenseParamGroups(unittest.TestCase):
         param_groups = model.get_param_groups()
 
         self.assertTrue(param_groups[OptimizerGroup.BACKBONE_2D])
+
+    def test_validate_param_groups_rejects_duplicate_params(self):
+        model = qwen3_configs["debugmodel"]().build()
+        groups = {group: ParamGroup() for group in OptimizerGroup}
+        groups[OptimizerGroup.EMBEDDING].no_decay_params.append(
+            model.tok_embeddings.weight
+        )
+        groups[OptimizerGroup.HEADS].decay_params.append(model.tok_embeddings.weight)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Parameter appears in both 'embedding' and 'heads' groups",
+        ):
+            model._validate_param_groups(groups)
+
+    def test_state_dict_adapter_roundtrip_keeps_embedding_and_head_separate(self):
+        config = qwen3_configs["debugmodel"]()
+        model = config.build()
+        adapter = Qwen3StateDictAdapter(config, None)
+        state_dict = {
+            "tok_embeddings.weight": model.tok_embeddings.weight.detach().clone(),
+            "output.weight": model.output.weight.detach().clone(),
+            "norm.weight": model.norm.weight.detach().clone(),
+            "layers.0.attention.wq.weight": (
+                model.layers["0"].attention.wq.weight.detach().clone()
+            ),
+        }
+
+        hf_state_dict = adapter.to_hf(state_dict)
+        self.assertIn("model.embed_tokens.weight", hf_state_dict)
+        self.assertIn("lm_head.weight", hf_state_dict)
+
+        roundtrip_state_dict = adapter.from_hf(hf_state_dict)
+        self.assertEqual(set(roundtrip_state_dict), set(state_dict))
+        for key, value in state_dict.items():
+            self.assertTrue(torch.equal(roundtrip_state_dict[key], value))
 
 
 if __name__ == "__main__":
