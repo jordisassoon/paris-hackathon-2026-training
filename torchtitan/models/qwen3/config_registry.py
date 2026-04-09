@@ -193,10 +193,10 @@ def hackathon_model() -> Trainer.Config:
             persistent_workers=True,
         ),
         optimizer=MultiGroupOptimizersContainer.Config(
-            embedding=AdamW.Config(lr=8e-4),
-            backbone_1d=AdamW.Config(lr=8e-4),
-            backbone_2d=Muon.Config(),
-            heads=AdamW.Config(lr=8e-4),
+            embedding=AdamW.Config(lr=2 ** -4),
+            backbone_1d=AdamW.Config(lr=2 ** -4),
+            backbone_2d=Muon.Config(lr=2 ** -5),
+            heads=AdamW.Config(lr= 2 ** -7),
         ),
         lr_scheduler=LRSchedulersContainer.Config(
             warmup_steps=0,
@@ -206,7 +206,7 @@ def hackathon_model() -> Trainer.Config:
         training=TrainingConfig(
             local_batch_size=86,
             seq_len=1024,
-            steps=180,
+            steps=700,
             global_batch_size=2752,
         ),
         checkpoint=CheckpointManager.Config(
