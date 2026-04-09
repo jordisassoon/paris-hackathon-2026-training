@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=torchtitan_sweep
 #SBATCH --partition=gpus
-#SBATCH --nodes=1
+#SBATCH --nodes=4
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=8
 #SBATCH --exclusive

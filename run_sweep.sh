@@ -43,7 +43,7 @@ if [ -f .env ]; then
     set +a
 fi
 export WANDB_PROJECT=${WANDB_PROJECT:-"paris-hackathon-2026"}
-export WANDB_ENTITY=${WANDB_ENTITY:-"YOUR_WANDB_ENTITY"}
+export WANDB_TEAM=${WANDB_TEAM:-"aleph-alpha"}
 export WANDB_RUN_GROUP=${WANDB_RUN_GROUP:-"lr-sweep"}
 
 # Training parameters
