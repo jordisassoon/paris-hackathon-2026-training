@@ -34,7 +34,12 @@ def qwen3_debugmodel() -> Trainer.Config:
         metrics=MetricsProcessor.Config(log_freq=1),
         model_spec=model_registry("debugmodel"),
         dataloader=HuggingFaceTextDataLoader.Config(dataset="c4_test"),
-        optimizer=OptimizersContainer.Config(lr=8e-4),
+        optimizer=MultiGroupOptimizersContainer.Config(
+            embedding=AdamW.Config(lr=8e-4),
+            backbone_1d=AdamW.Config(lr=8e-4),
+            backbone_2d=Muon.Config(),
+            heads=AdamW.Config(lr=8e-4),
+        ),
         lr_scheduler=LRSchedulersContainer.Config(
             warmup_steps=2,
             decay_ratio=0.8,
@@ -54,17 +59,6 @@ def qwen3_debugmodel() -> Trainer.Config:
             mode="selective",
         ),
     )
-
-
-def qwen3_debugmodel_param_groups() -> Trainer.Config:
-    config = qwen3_debugmodel()
-    config.optimizer = MultiGroupOptimizersContainer.Config(
-        embedding=AdamW.Config(lr=8e-4),
-        backbone_1d=AdamW.Config(lr=8e-4),
-        backbone_2d=Muon.Config(),
-        heads=AdamW.Config(lr=8e-4),
-    )
-    return config
 
 
 def qwen3_debugmodel_flex() -> Trainer.Config:
@@ -205,7 +199,12 @@ def qwen3_1_7b_varlen() -> Trainer.Config:
         dataloader=HuggingFaceTextDataLoader.Config(
             dataset="c4",
         ),
-        optimizer=OptimizersContainer.Config(lr=8e-4),
+        optimizer=MultiGroupOptimizersContainer.Config(
+            embedding=AdamW.Config(lr=8e-4),
+            backbone_1d=AdamW.Config(lr=8e-4),
+            backbone_2d=Muon.Config(),
+            heads=AdamW.Config(lr=8e-4),
+        ),
         lr_scheduler=LRSchedulersContainer.Config(warmup_steps=20),
         training=TrainingConfig(
             local_batch_size=4,
