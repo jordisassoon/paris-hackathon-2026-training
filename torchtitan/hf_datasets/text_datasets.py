@@ -203,36 +203,38 @@ class HackathonTextDataset(IterableDataset, Stateful):
             #         ):
             #             self._data.set_epoch(self._data.epoch + 1)
 
-    # def load_state_dict(self, state_dict):
-    #     self._inputs_buffer = state_dict["inputs_buffer"]
-    #     if "positions_buffer" not in state_dict:
-    #         logger.warning(
-    #             "Checkpoint missing 'positions_buffer'. Falling back to empty buffer. "
-    #             "RoPE positions may be incorrect with block_causal attention."
-    #         )
-    #     self._positions_buffer = state_dict.get("positions_buffer", [])
+    def load_state_dict(self, state_dict):
+        return
+        # self._inputs_buffer = state_dict["inputs_buffer"]
+        # if "positions_buffer" not in state_dict:
+        #     logger.warning(
+        #         "Checkpoint missing 'positions_buffer'. Falling back to empty buffer. "
+        #         "RoPE positions may be incorrect with block_causal attention."
+        #     )
+        # self._positions_buffer = state_dict.get("positions_buffer", [])
 
-    #     if isinstance(self._data, Dataset):
-    #         self._sample_idx = state_dict["sample_idx"]
-    #     else:
-    #         assert "data" in state_dict
-    #         self._data.load_state_dict(state_dict["data"])
+        # if isinstance(self._data, Dataset):
+        #     self._sample_idx = state_dict["sample_idx"]
+        # else:
+        #     assert "data" in state_dict
+        #     self._data.load_state_dict(state_dict["data"])
 
-    # def state_dict(self):
-    #     _state_dict: dict[str, Any] = {
-    #         "inputs_buffer": self._inputs_buffer,
-    #         "positions_buffer": self._positions_buffer,
-    #     }
+    def state_dict(self):
+        return
+        # _state_dict: dict[str, Any] = {
+        #     "inputs_buffer": self._inputs_buffer,
+        #     "positions_buffer": self._positions_buffer,
+        # }
 
-    #     if isinstance(self._data, Dataset):
-    #         _state_dict["sample_idx"] = self._sample_idx
-    #         _state_dict["epoch"] = self._epoch
-    #     else:
-    #         # Save the iterable dataset's state to later efficiently resume from it
-    #         # https://huggingface.co/docs/datasets/v3.5.0/en/stream#save-a-dataset-checkpoint-and-resume-iteration
-    #         _state_dict["data"] = self._data.state_dict()
+        # if isinstance(self._data, Dataset):
+        #     _state_dict["sample_idx"] = self._sample_idx
+        #     _state_dict["epoch"] = self._epoch
+        # else:
+        #     # Save the iterable dataset's state to later efficiently resume from it
+        #     # https://huggingface.co/docs/datasets/v3.5.0/en/stream#save-a-dataset-checkpoint-and-resume-iteration
+        #     _state_dict["data"] = self._data.state_dict()
 
-    #     return _state_dict
+        # return _state_dict
 
 
 class HuggingFaceTextDataset(IterableDataset, Stateful):

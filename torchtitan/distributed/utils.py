@@ -306,12 +306,14 @@ def maybe_enable_amp(
             logger.info("Mixed precision training is disabled")
             return contextlib.nullcontext()
         else:
-            # the following code will only be executed for single-device training
-            logger.info("Mixed precision training is handled by AMP")
-            return torch.autocast(
-                device_type,
-                dtype=TORCH_DTYPE_MAP[mixed_precision_param],
-            )
+            # # the following code will only be executed for single-device training
+            # logger.info("Mixed precision training is handled by AMP")
+            # return torch.autocast(
+            #     device_type,
+            #     dtype=TORCH_DTYPE_MAP[mixed_precision_param],
+            # )
+            logger.info("Running single GPU but not activating autocast.")
+            return contextlib.nullcontext()
 
 
 def init_fake_mode(world_size: int, comm_mode: str = "fake_backend"):

@@ -858,7 +858,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
                     start_time = time.time()
                     # TODO: save checkpoint
                     self.checkpointer.save(
-                        self.step, last_step=(self.step == config.training.steps)
+                        self.step, last_step=True,
                     )
 
                     #break

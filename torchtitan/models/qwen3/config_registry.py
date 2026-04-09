@@ -181,7 +181,7 @@ def hackathon_model() -> Trainer.Config:
             heads=AdamW.Config(lr=8e-4),
         ),
         lr_scheduler=LRSchedulersContainer.Config(
-            warmup_steps=0
+            warmup_steps=0,
             decay_ratio=0.3,
             min_lr_factor=0.1,
         ),
@@ -192,8 +192,10 @@ def hackathon_model() -> Trainer.Config:
         ),
         checkpoint=CheckpointManager.Config(
             interval=50,
-            last_save_model_only=False,
             export_dtype="float32",
+            folder="checkpoint_platypus",
+            enable=True,
+            last_save_model_only=True,
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
