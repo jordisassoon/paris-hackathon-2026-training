@@ -831,8 +831,6 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
         self.checkpointer.load(step=config.checkpoint.load_step)
         logger.info(f"Training starts at step {self.step + 1}")
 
-        start_time = time.time()
-
         with (
             maybe_enable_profiling(
                 config.profiling,
@@ -846,12 +844,14 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful, Configurable):
             ) as memory_profiler,
         ):
             data_iterator = self.batch_generator(self.dataloader)
+
+            start_time = time.time()
             while True:
                 if not self.should_continue_training():
                     break
 
                 # Check for 10 min:
-                if time.time() - start_time > 1 * 60:
+                if time.time() - start_time > 0.2 * 60:
                     logger.warning(
                         "Training has been running for 10 minutes. If this is unexpected, please check the logs for potential issues."
                     )

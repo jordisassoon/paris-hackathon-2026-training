@@ -172,6 +172,9 @@ def hackathon_model() -> Trainer.Config:
     return Trainer.Config(
         hf_assets_path="./assets/hf/Qwen3-1.7B",
         model_spec=model_registry("1.7B"),
+        metrics=MetricsProcessor.Config(
+            enable_wandb=True, log_freq=1
+            ),
         dataloader=HackathonTextDataLoader.Config(
             dataset_path="/home/data",
         ),
