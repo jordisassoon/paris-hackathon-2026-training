@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=torchtitan_sweep
+#SBATCH --job-name=platypus_train
 #SBATCH --partition=gpus
 #SBATCH --nodes=4
 #SBATCH --ntasks-per-node=1
@@ -30,35 +30,12 @@ source .venv/bin/activate
 # ── Training config ─────────────────────────────────────────────────────────
 MODULE=${MODULE:-"qwen3"}
 CONFIG=${CONFIG:-"hackathon_model"}
-STEPS=${STEPS:-"180"}
-
-# Per-group learning rates (passed from run_sweep.sh via --export)
-LR_EMB=${LR_EMB:-""}
-LR_BACKBONE1D=${LR_BACKBONE1D:-""}
-LR_MUON=${LR_MUON:-""}
-LR_HEADS=${LR_HEADS:-""}
-BASE_LR=${BASE_LR:-""}
-
-# Build optimizer LR flags if set
-OPT_FLAGS=""
-if [ -n "$LR_EMB" ]; then
-    OPT_FLAGS="${OPT_FLAGS} --optimizer.embedding.lr ${LR_EMB}"
-fi
-if [ -n "$LR_BACKBONE1D" ]; then
-    OPT_FLAGS="${OPT_FLAGS} --optimizer.backbone_1d.lr ${LR_BACKBONE1D}"
-fi
-if [ -n "$LR_MUON" ]; then
-    OPT_FLAGS="${OPT_FLAGS} --optimizer.backbone_2d.lr ${LR_MUON}"
-fi
-if [ -n "$LR_HEADS" ]; then
-    OPT_FLAGS="${OPT_FLAGS} --optimizer.heads.lr ${LR_HEADS}"
-fi
 
 # Unique checkpoint folder per LR to avoid loading stale checkpoints
-CHECKPOINT_FOLDER="checkpoint_lr_${BASE_LR:-default}"
+CHECKPOINT_FOLDER="platypus_checkpoints/final_run"
 
 # Wandb run name (passed from run_sweep.sh)
-export WANDB_RUN_NAME=${WANDB_RUN_NAME:-"sweep-baseLR${BASE_LR}"}
+export WANDB_RUN_NAME=${WANDB_RUN_NAME:-"final-run"}
 
 # ── Launch one torchrun per node via srun ────────────────────────────────────
 srun python -m torch.distributed.run \
@@ -68,5 +45,4 @@ srun python -m torch.distributed.run \
     --rdzv_endpoint="$MASTER_ADDR:$MASTER_PORT" \
     --rdzv_id="$SLURM_JOB_ID" \
     -m torchtitan.train --module ${MODULE} --config ${CONFIG} \
-    --training.steps=${STEPS} \
     --checkpoint.folder ${CHECKPOINT_FOLDER} ${OPT_FLAGS}
