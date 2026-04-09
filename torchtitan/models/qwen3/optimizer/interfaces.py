@@ -47,7 +47,7 @@ class ParamGroup:
 
 
 class ConfigurableOptimizer(Configurable):
-    """Base class for Phoenix optimizers built from a nested Config."""
+    """Base class for Qwen3 optimizers built from a nested Config."""
 
     @dataclass(kw_only=True, slots=True)
     class Config(Configurable.Config):
