@@ -18,7 +18,7 @@ from torch.optim import Optimizer
 from torchtitan.components.optimizer import OptimizersContainer
 from torchtitan.config import Configurable
 from torchtitan.distributed import ParallelDims
-from torchtitan.experiments.phoenix.optimizer.interfaces import (
+from torchtitan.models.qwen3.optimizer.interfaces import (
     ConfigurableOptimizer,
     OptimizerGroup,
     ParamGroup,
@@ -41,7 +41,7 @@ class MultiGroupOptimizersContainer(OptimizersContainer):
     4. backbone_1d: 1D parameters in the backbone (biases, norms, etc.)
 
      Within each group, parameters are further split by weight-decay intent:
-    the model's Phoenix.get_param_groups returns
+    the model's Qwen3.get_param_groups returns
     ParamGroup instances that distinguish decay vs no-decay params.
 
     This allows using different optimizers for different groups, e.g. Muon for
@@ -56,7 +56,7 @@ class MultiGroupOptimizersContainer(OptimizersContainer):
     @dataclass(kw_only=True, slots=True)
     class Config(Configurable.Config):
         # This replaces the base OptimizersContainer.Config entirely because
-        # Phoenix configures optimizers per parameter group rather than via one
+        # Qwen3 configures optimizers per parameter group rather than via one
         # shared optimizer hyperparameter set.
         embedding: ConfigurableOptimizer.Config
         backbone_1d: ConfigurableOptimizer.Config
@@ -77,12 +77,6 @@ class MultiGroupOptimizersContainer(OptimizersContainer):
         self.group_optimizers: dict[OptimizerGroup, list[tuple[int, Optimizer]]] = {
             group: [] for group in OptimizerGroup
         }
-
-        # Import Phoenix here to avoid circular import
-        from torchtitan.experiments.phoenix.feed_forward.router import (
-            TokenChoiceTopKRouter,
-        )
-        from torchtitan.experiments.phoenix.model.model import Phoenix
 
         for part_idx, model in enumerate(self.model_parts):
             param_groups: dict[OptimizerGroup, ParamGroup] = model.get_param_groups()

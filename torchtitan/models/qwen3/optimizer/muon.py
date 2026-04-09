@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from dion import Muon as DionMuon
 
 from torchtitan.distributed import ParallelDims
-from torchtitan.experiments.phoenix.optimizer.interfaces import (
+from torchtitan.models.qwen3.optimizer.interfaces import (
     ConfigurableOptimizer,
     ParamGroup,
 )

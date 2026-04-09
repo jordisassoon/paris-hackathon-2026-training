@@ -6,7 +6,7 @@ from typing import Literal
 from torch.optim import AdamW as TorchAdamW
 
 from torchtitan.distributed import ParallelDims
-from torchtitan.experiments.phoenix.optimizer.interfaces import (
+from torchtitan.models.qwen3.optimizer.interfaces import (
     ConfigurableOptimizer,
     ParamGroup,
 )
